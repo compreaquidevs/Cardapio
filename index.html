@@ -930,8 +930,8 @@
 
     <header id="main-header">
         <div class="header-content">
-            <img id="header-company-avatar" class="company-logo-avatar" src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80" alt="Logo Empresa" style="display: none;">
-            <h1 class="header-title" id="header-title">
+            <img id="header-company-avatar" class="company-logo-avatar" src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80" alt="Logo Empresa" style="display: none; cursor: pointer;" onclick="openCompanyInfoModal()">
+			<h1 class="header-title" id="header-title">
                 <i class="fa-solid fa-utensils"></i>
                 Cardápio Digital
             </h1>
@@ -947,6 +947,20 @@
             <p style="font-size:0.85rem; color:#6b7280;">Carregando cardápio...</p>
         </div>
     </main>
+	
+	<!-- Modal Informações da Empresa -->
+	<div class="modal-overlay" id="company-info-modal">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h3 class="modal-title" id="info-modal-title">Informações do Estabelecimento</h3>
+				<button class="btn-close" onclick="closeCompanyInfoModal()">&times;</button>
+			</div>
+			
+			<div id="company-info-modal-body" style="display: flex; flex-direction: column; gap: 14px; font-size: 0.9rem;">
+				<!-- Conteúdo carregado dinamicamente via JS -->
+			</div>
+		</div>
+	</div>
 
     <div class="sticky-cart-bar" id="cart-bar" style="display: none;">
         <div class="sticky-cart-inner">
@@ -3111,6 +3125,130 @@
 
             container.innerHTML = html;
         }
+		
+		// Função atualizada de carregamento do menu da empresa
+		async function loadCompanyMenu(company) {
+			const container = document.getElementById('app-container');
+			container.innerHTML = `
+				<div class="loader-container">
+					<div class="spinner"></div>
+					<p style="font-size:0.85rem; color:#6b7280;">Carregando cardápio de ${company.nome}...</p>
+				</div>
+			`;
+
+			const avatarImg = document.getElementById('header-company-avatar');
+			avatarImg.src = company.link_img || (company.id === 'lanches-avenida' 
+				? 'https://raw.githubusercontent.com/gustavoamorimqueiroz1/CompreAquiImages/refs/heads/master/Customers/lanches_av.png'
+				: 'https://raw.githubusercontent.com/gustavoamorimqueiroz1/CompreAquiImages/refs/heads/master/Customers/pizzaria.png');
+			avatarImg.style.display = 'block';
+			avatarImg.title = "Clique para ver mais informações da empresa";
+
+			let enderecoStr = company.endereco 
+				? `${company.endereco.logradouro || ''}, ${company.endereco.numero || ''}${company.endereco.complemento ? ' - ' + company.endereco.complemento : ''} - ${company.endereco.bairro || ''}, ${company.endereco.cidade || ''}`
+				: 'Endereço não disponível';
+
+			document.getElementById('header-title').innerHTML = company.nome;
+			document.getElementById('company-info-container').innerHTML = `
+				<div style="margin-top: 4px; line-height: 1.4;">
+					<span id="store-status" style="font-weight: bold;"></span>
+					<div style="font-size: 11px; color: #d1d5db; margin-top: 2px;">
+						<span>📍 ${enderecoStr}</span>
+					</div>
+				</div>
+				<div class="header-info-badge">
+					<span><i class="fa-solid fa-phone"></i> ${company.telefone}</span>
+					<span>•</span>
+					<span><i class="fa-solid fa-motorcycle"></i> ${formatMoney(company.taxaentrega)}</span>
+					${company.minimo ? `<span>• Min: ${formatMoney(company.minimo)}</span>` : ''}
+				</div>
+			`;
+
+			try {
+				let rawText;
+				try {
+					const res = await fetch(company.link);
+					rawText = await res.text();
+				} catch {
+					// fallback
+				}
+
+				const data = safeJSONParse(rawText);
+				state.products = (data[0].produtos || []).filter(p => p.ativo === "s" || p.ativo === "S");
+				state.compostos = data[0].compostos || data[0].composicao || [];
+				state.categories = data[0].categoria || [];
+				state.selectedCategory = 'todas';
+				state.cart = [];
+
+				renderCompanyProductsView();
+				updateCartBar();
+			} catch (err) {
+				console.error("Erro ao carregar produtos:", err);
+				container.innerHTML = `<div style="text-align:center; padding: 40px 0; color: var(--danger-color);"><p>Erro ao carregar o cardápio desta empresa.</p></div>`;
+			}
+		}
+
+		// Novas funções para exibir e fechar o modal com detalhes e horários de funcionamento
+		// Função para abrir o modal com informações da empresa e horários de atendimento
+		function openCompanyInfoModal() {
+			const comp = state.currentCompany;
+			if (!comp) return;
+
+			const modalBody = document.getElementById('company-info-modal-body');
+			document.getElementById('info-modal-title').textContent = comp.nome;
+
+			let enderecoStr = comp.endereco 
+				? `${comp.endereco.logradouro || ''}, ${comp.endereco.numero || ''}${comp.endereco.complemento ? ' - ' + comp.endereco.complemento : ''} - ${comp.endereco.bairro || ''}, ${comp.endereco.cidade || ''}/${comp.endereco.estado || ''}`
+				: 'Endereço não disponível';
+
+			const at = comp.atendimento || {};
+			const diasSemana = [
+				{ label: 'Segunda-feira', ini: at.inicioSegunda, fim: at.fimSegunda },
+				{ label: 'Terça-feira', ini: at.inicioTerca, fim: at.fimTerca },
+				{ label: 'Quarta-feira', ini: at.inicioQuarta, fim: at.fimQuarta },
+				{ label: 'Quinta-feira', ini: at.inicioQuinta, fim: at.fimQuinta },
+				{ label: 'Sexta-feira', ini: at.inicioSexta, fim: at.fimSexta },
+				{ label: 'Sábado', ini: at.inicioSabado, fim: at.fimSabado },
+				{ label: 'Domingo', ini: at.inicioDomingo, fim: at.fimDomingo }
+			];
+
+			let horariosHtml = diasSemana.map(d => {
+				const isFechado = !d.ini || !d.fim || d.ini === d.fim;
+				const horario = isFechado ? 'Fechado' : `${d.ini} às ${d.fim}`;
+				
+				return `<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #e5e7eb; font-size: 0.85rem;">
+					<span>${d.label}</span>
+					<span style="font-weight: 600; color: ${isFechado ? 'var(--danger-color)' : '#374151'};">${horario}</span>
+				</div>`;
+			}).join('');
+
+			modalBody.innerHTML = `
+				<div style="text-align: center; margin-bottom: 8px;">
+					<img src="${comp.link_img}" style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--accent-yellow); object-fit: cover;">
+					<p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 6px;">${comp.descricao || ''}</p>
+				</div>
+
+				<div>
+					<h4 style="font-size: 0.9rem; font-weight: 700; color: var(--text-dark); margin-bottom: 4px;">📍 Endereço:</h4>
+					<p style="font-size: 0.85rem; color: #4b5563;">${enderecoStr}</p>
+				</div>
+
+				<div>
+					<h4 style="font-size: 0.9rem; font-weight: 700; color: var(--text-dark); margin-bottom: 4px;">📞 Telefone / WhatsApp:</h4>
+					<p style="font-size: 0.85rem; color: #4b5563;">${comp.telefone || 'Não informado'}</p>
+				</div>
+
+				<div style="background: #f9fafb; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color);">
+					<h4 style="font-size: 0.9rem; font-weight: 700; color: var(--text-dark); margin-bottom: 8px;">🕒 Dias e Horários de Atendimento:</h4>
+					${horariosHtml}
+				</div>
+			`;
+
+			document.getElementById('company-info-modal').classList.add('active');
+		}
+
+		function closeCompanyInfoModal() {
+			document.getElementById('company-info-modal').classList.remove('active');
+		}
 
         function retornaEmpresas(){
             return `[
@@ -3183,7 +3321,7 @@
                       "pais": "Brasil"
                     },
                     "atendimento": {
-                      "inicioSegunda": "8:00",
+                      "inicioSegunda": "9:30",
                       "fimSegunda": "23:30",
                       "inicioTerca": "8:00",
                       "fimTerca": "23:30",
