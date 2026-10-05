@@ -702,7 +702,7 @@
             width: 100%;
             border-radius: 14px;
             overflow: hidden;
-            margin: 20px 0 12px 0;
+            margin: 0 0 16px 0;
             box-shadow: var(--shadow-md);
             touch-action: pan-y;
         }
@@ -924,7 +924,7 @@
             margin-bottom: 12px;
         }
     </style>
-    <link id="favicon" rel="icon" type="image/png" href="https://scontent-gig4-2.cdninstagram.com/v/t51.82787-15/620417266_18105247282706287_2063464713456114473_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=103&ig_cache_key=MjM1NzgwOTY5NTc4OTg0NjY2MQ%3D%3D.3-ccb7-5&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkZFRUQueHBpZHMuMTAwNi5zZHIucmVndWxhcl9waG90by5DMyJ9&_nc_ohc=h--OE3p9ulYQ7kNvwEC-J1q&_nc_oc=AdoxfW0kqiYNj3f3DJHLBKKxKm0bFkkiPWVkGJ0gej0yPCGi0yNol7qL5FyU_U-fe68&_nc_zt=23&_nc_ht=scontent-gig4-2.cdninstagram.com&_nc_gid=rWqifgXu8BNB313Z3tsgkg&_nc_ss=70689&oh=00_AQM6pzni0dw_-Pf-sEOS1TL8zmYxex_Jp_YKrySWTCk4yw&oe=6AC19693">
+    <link id="favicon" rel="icon" type="image/png" href="https://scontent-gig4-2.cdninstagram.com/v/t51.82787-15/620417266_18105247282706287_2063464713456114473_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=103&ig_cache_key=MjM1NzgwOTY5NTc4OTg0NjY2MQ%3D%3D.3-ccb7-5&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkZFRUQueHBpZHMuMTAwNi5zZHIucmVndWxhcl9waG90by5DMyJ9&_nc_ohc=h--OE3p9ulYQ7kNvwEC-J1q&_nc_oc=AdoxfW0kqiYNj3f3DJHLBKKxKm0bFkkiPWVkGJ0gej0yPCGi0yNol7qL5FyU-fe68&_nc_zt=23&_nc_ht=scontent-gig4-2.cdninstagram.com&_nc_gid=rWqifgXu8BNB313Z3tsgkg&_nc_ss=70689&oh=00_AQM6pzni0dw_-Pf-sEOS1TL8zmYxex_Jp_YKrySWTCk4yw&oe=6AC19693">
 </head>
 <body>
 
@@ -1309,7 +1309,7 @@
         const CAROUSEL_IMAGES = [
             { url: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&auto=format&fit=crop&q=80", title: "Sabores Incríveis & Entregas Rápidas" },
             { url: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80", title: "Qualidade Garantida em Cada Pedido" },
-            { url: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&auto=format&fit=crop&q=80", title: "Os Melhores Estabelecimentos da Região" }
+            { url: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&auto=format&fit=crop&q=80", title: "Com o Bonappetit Cardápio Digital fica mais fácil para realizar pedidos" }
         ];
 
         function formatMoney(value) {
@@ -1653,9 +1653,9 @@
 
             container.innerHTML = `
                 <div class="category-scroll">${catChipsHtml}</div>
+                ${carouselHtml}
                 <div class="section-title">Cardápio</div>
                 ${productsHtml}
-                ${carouselHtml}
                 ${footerHtml}
             `;
             
@@ -2301,17 +2301,25 @@
             const container = document.getElementById('app-container');
 
             if (!state.adminLoggedCompany) {
+                const savedUser = localStorage.getItem('admin_saved_user') || '';
+                const savedPass = localStorage.getItem('admin_saved_pass') || '';
+                const isRemembered = localStorage.getItem('admin_remember_login') === 'true';
+
                 container.innerHTML = `
                     <div class="page-view">
                         <h2 style="font-size: 1.2rem; font-weight: 800; margin-bottom: 12px; text-align:center;">Acesso ao Portal do Restaurante</h2>
                         <form onsubmit="handleAdminLogin(event)" style="display:flex; flex-direction:column; gap:12px;">
                             <div class="form-group">
                                 <label class="form-label" for="adm-user">Usuário *</label>
-                                <input type="text" id="adm-user" class="form-control" placeholder="Ex: Dr.burger" required>
+                                <input type="text" id="adm-user" class="form-control" placeholder="Ex: Dr.burger" value="${savedUser}" required>
                             </div>
                             <div class="form-group">
                                 <label class="form-label" for="adm-pass">Senha *</label>
-                                <input type="password" id="adm-pass" class="form-control" placeholder="" required>
+                                <input type="password" id="adm-pass" class="form-control" placeholder="" value="${savedPass}" required>
+                            </div>
+                            <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="adm-remember" ${isRemembered ? 'checked' : ''} style="accent-color: var(--accent-yellow); width: 16px; height: 16px; cursor: pointer;">
+                                <label class="form-label" for="adm-remember" style="cursor: pointer; margin: 0;">Lembrar login e senha</label>
                             </div>
                             <button type="submit" class="btn-submit">
                                 <i class="fa-solid fa-right-to-bracket"></i> Entrar no Portal
@@ -2328,6 +2336,7 @@
 					event.preventDefault();
 					const empresaIdInput = document.getElementById('adm-user').value.trim();
 					const senhaInput = document.getElementById('adm-pass').value.trim();
+					const rememberInput = document.getElementById('adm-remember').checked;
 
 					if (!empresaIdInput || senhaInput.length < 3) {
 						showToast("Login inválido!");
@@ -2364,6 +2373,16 @@
 						});
 
 						if (response.ok) {
+							if (rememberInput) {
+								localStorage.setItem('admin_saved_user', empresaIdInput);
+								localStorage.setItem('admin_saved_pass', senhaInput);
+								localStorage.setItem('admin_remember_login', 'true');
+							} else {
+								localStorage.removeItem('admin_saved_user');
+								localStorage.removeItem('admin_saved_pass');
+								localStorage.removeItem('admin_remember_login');
+							}
+
 							GT = tokenTest; // Grava a chave na sessão
 							state.adminLoggedCompany = empresaEncontrada;
 							showToast(`Bem-vindo, ${empresaEncontrada.nome}!`);
