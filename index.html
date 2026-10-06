@@ -1241,6 +1241,9 @@
         const GIST_NUMERO_PEDIDOS_ID = "9d4bbed3aaf290179f5aa613b672e9ae";
         const WHATSAPP_TARGET = "5533999648737";
         
+        // Variavel para armazenar o novo link gerado do Gist
+        window.GIST_LINK_ATUALIZADO = null;
+
         // Base do token
         const GT_PARTE1 = "ghp_";
         const GT_PARTE2 = "twAWdUEFDj3GyeAfuMdzZYvd2S13dJCcY";
@@ -1309,7 +1312,7 @@
             prato: "https://pracasaolourenco.com.br/wp-content/uploads/2026/02/1B0A3766-2.jpg",
             almoco: "https://pracasaolourenco.com.br/wp-content/uploads/2026/02/1B0A3766-2.jpg",
             acompanhamento: "https://images.unsplash.com/photo-1576107232684-1279f390859f?w=400&auto=format&fit=crop&q=80",
-            generico: "https://github.com/gustavoamorimqueiroz1/CompreAquiImages/blob/master/Customers/app-logo.png",
+            generico: "https://raw.githubusercontent.com/gustavoamorimqueiroz1/CompreAquiImages/master/Customers/app-logo.png",
             padaria: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&auto=format&fit=crop&q=80",
             culinariadiversas: "https://thumbs.dreamstime.com/b/culin%C3%A1ria-de-pa%C3%ADses-diferentes-67572653.jpg",
             mercado: "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=400&auto=format&fit=crop&q=80",
@@ -1317,6 +1320,7 @@
             salgados: "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhcH_ZA05CuM9GIaZPXboqLsSd8lJfXfn-62uectKLUip22BJ58IBJWvFwptx35QmOPgJPruUjM_zUvBJWfwq3_p66PjvKBQV_F8cWWfURaLF0Qdn0arMx4s6JTXUI1u_E5JbaJBsTzmIM/s1600/salgados-assados-e1431358017984.jpg",
             sanduiches: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=400&auto=format&fit=crop&q=80",
             frangofrito: "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?w=400&auto=format&fit=crop&q=80",
+            "frango-frito": "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?w=400&auto=format&fit=crop&q=80",
             hotdog: "https://images.unsplash.com/photo-1619740455993-9e612b1af08a?w=400&auto=format&fit=crop&q=80"
         };
 
@@ -1329,6 +1333,15 @@
         function formatMoney(value) {
             const val = parseFloat(value) || 0;
             return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        function getCategoryLabel(cat) {
+            if (!cat) return '';
+            const normalized = cat.toLowerCase().trim();
+            if (normalized === 'culinariadiversa' || normalized === 'culinariadiversas') return 'Culinária Diversa';
+            if (normalized === 'frango-frito' || normalized === 'frangofrito') return 'Frango Frito';
+            if (normalized === 'hotdog') return 'Hot Dog';
+            return cat;
         }
 
         function showToast(message) {
@@ -1528,65 +1541,6 @@
             window.location.search = '?page=numeroPedidos';
         }
 
-        async function loadCompanyMenu(company) {
-            const container = document.getElementById('app-container');
-            container.innerHTML = `
-                <div class="loader-container">
-                    <div class="spinner"></div>
-                    <p style="font-size:0.85rem; color:#6b7280;">Carregando cardápio de ${company.nome}...</p>
-                </div>
-            `;
-
-            const avatarImg = document.getElementById('header-company-avatar');
-            avatarImg.src = company.link_img || (company.id === 'lanches-avenida' 
-                ? 'https://raw.githubusercontent.com/gustavoamorimqueiroz1/CompreAquiImages/refs/heads/master/Customers/lanches_av.png'
-                : 'https://raw.githubusercontent.com/gustavoamorimqueiroz1/CompreAquiImages/refs/heads/master/Customers/pizzaria.png');
-            avatarImg.style.display = 'block';
-
-            let enderecoStr = company.endereco 
-                ? `${company.endereco.logradouro || ''}, ${company.endereco.numero || ''}${company.endereco.complemento ? ' - ' + company.endereco.complemento : ''} - ${company.endereco.bairro || ''}, ${company.endereco.cidade || ''}`
-                : 'Endereço não disponível';
-
-            document.getElementById('header-title').innerHTML = company.nome;
-            document.getElementById('company-info-container').innerHTML = `
-                <div style="margin-top: 4px; line-height: 1.4;">
-                    <span id="store-status" style="font-weight: bold;"></span>
-                    <div style="font-size: 11px; color: #d1d5db; margin-top: 2px;">
-                        <span>📍 ${enderecoStr}</span>
-                    </div>
-                </div>
-                <div class="header-info-badge">
-                    <span><i class="fa-solid fa-phone"></i> ${company.telefone}</span>
-                    <span>•</span>
-                    <span><i class="fa-solid fa-motorcycle"></i> ${formatMoney(company.taxaentrega)}</span>
-                    ${company.minimo ? `<span>• Min: ${formatMoney(company.minimo)}</span>` : ''}
-                </div>
-            `;
-
-            try {
-                let rawText;
-                try {
-                    const res = await fetch(company.link);
-                    rawText = await res.text();
-                } catch {
-                    // fallback
-                }
-
-                const data = safeJSONParse(rawText);
-                state.products = (data[0].produtos || []).filter(p => p.ativo === "s" || p.ativo === "S");
-                state.compostos = data[0].compostos || data[0].composicao || [];
-                state.categories = data[0].categoria || [];
-                state.selectedCategory = 'todas';
-                state.cart = [];
-
-                renderCompanyProductsView();
-                updateCartBar();
-            } catch (err) {
-                console.error("Erro ao carregar produtos:", err);
-                container.innerHTML = `<div style="text-align:center; padding: 40px 0; color: var(--danger-color);"><p>Erro ao carregar o cardápio desta empresa.</p></div>`;
-            }
-        }
-
         function renderCompanyProductsView() {
             const container = document.getElementById('app-container');
 
@@ -1596,7 +1550,7 @@
             let catChipsHtml = `<button class="category-chip ${state.selectedCategory === 'todas' ? 'active' : ''}" onclick="filterCategory('todas')">Todas</button>`;
 
             sortedCategories.forEach(cat => {
-                catChipsHtml += `<button class="category-chip ${state.selectedCategory === cat ? 'active' : ''}" onclick="filterCategory('${cat}')">${cat}</button>`;
+                catChipsHtml += `<button class="category-chip ${state.selectedCategory === cat ? 'active' : ''}" onclick="filterCategory('${cat}')">${getCategoryLabel(cat)}</button>`;
             });
 
             let filteredProducts = (state.selectedCategory === 'todas'
@@ -1899,9 +1853,26 @@
             document.getElementById('cart-total-text').textContent = formatMoney(subtotal);
         }
 
+        function loadUserData() {
+            const savedUserData = localStorage.getItem('user_info');
+            if (savedUserData) {
+                try {
+                    const userData = JSON.parse(savedUserData);
+                    if (userData.nome) document.getElementById('c-nome').value = userData.nome;
+                    if (userData.telefone) document.getElementById('c-telefone').value = userData.telefone;
+                    if (userData.logradouro) document.getElementById('c-logradouro').value = userData.logradouro;
+                    if (userData.numero) document.getElementById('c-numero').value = userData.numero;
+                    if (userData.bairro) document.getElementById('c-bairro').value = userData.bairro;
+                } catch (e) {
+                    console.error("Erro ao carregar dados do usuário do localStorage", e);
+                }
+            }
+        }
+
         function openCartModal() {
             renderCartModalItems();
             updateCartSummary();
+            loadUserData();
             document.getElementById('cart-modal').classList.add('active');
         }
 
@@ -2027,6 +1998,16 @@
             const trocoInput = document.getElementById('c-troco');
             const obsInput = document.getElementById('c-obs');
             const tipoEntrega = document.querySelector('input[name="tipoEntrega"]:checked').value;
+
+            // Salva as informações do usuário no localStorage
+            const userDataToSave = {
+                nome: nomeInput.value.trim(),
+                telefone: telInput.value.trim(),
+                logradouro: logInput.value.trim(),
+                numero: numInput.value.trim(),
+                bairro: baiInput.value.trim()
+            };
+            localStorage.setItem('user_info', JSON.stringify(userDataToSave));
 
             const taxa = tipoEntrega === 'delivery' ? (state.currentCompany ? state.currentCompany.taxaentrega : 0) : 0;
             const total = subtotal + taxa;
@@ -2322,7 +2303,7 @@
                 container.innerHTML = `
                     <div class="page-view">
                         <h2 style="font-size: 1.2rem; font-weight: 800; margin-bottom: 12px; text-align:center;">Acesso ao Portal do Restaurante</h2>
-                        <form onsubmit="handleAdminLogin(event)" style="display:flex; flex-direction:column; gap:12px;">
+						<form onsubmit="handleAdminLogin(event)" style="display:flex; flex-direction:column; gap:12px;">
                             <div class="form-group">
                                 <label class="form-label" for="adm-user">Usuário *</label>
                                 <input type="text" id="adm-user" class="form-control" placeholder="Ex: Dr.burger" value="${savedUser}" required>
@@ -2345,6 +2326,7 @@
                 renderAdminDashboard();
             }
         }
+		
 
         async function handleAdminLogin(event) {
 					event.preventDefault();
@@ -2460,7 +2442,7 @@
                                 ${compBadge}
                             </div>
                         </div>
-                        <div style="font-size:0.8rem; color:#6b7280; margin-top:2px;">Cat: ${prod.categoria} | Preço: ${formatMoney(prod.preco_custo)}</div>
+                        <div style="font-size:0.8rem; color:#6b7280; margin-top:2px;">Cat: ${getCategoryLabel(prod.categoria)} | Preço: ${formatMoney(prod.preco_custo)}</div>
                         <div style="font-size:0.78rem; color:#4b5563; margin-top:4px;">${prod.descricao || 'Sem descrição'}</div>
                         <div class="admin-actions">
                             <button class="btn-admin-edit" onclick="openAdminProductModal(${idx})"><i class="fa-solid fa-pen"></i> Editar</button>
@@ -2483,7 +2465,7 @@
                     <div class="admin-card" style="border-left: 4px solid #0284c7;">
                         <div style="font-weight:700; font-size:0.95rem; display:flex; justify-content:space-between; align-items:center;">
                             <span>${comp.nome || comp.categoria}</span>
-                            <span class="comp-tag" style="background:#e0f2fe; color:#0369a1;">Cat: ${comp.categoria || 'Geral'}</span>
+                            <span class="comp-tag" style="background:#e0f2fe; color:#0369a1;">Cat: ${getCategoryLabel(comp.categoria) || 'Geral'}</span>
                         </div>
                         <div style="font-size:0.8rem; color:#4b5563; margin-top:4px;"><strong>Itens:</strong> ${itensStr || 'Nenhum item adicionado'}</div>
                         <div class="admin-actions">
@@ -2552,7 +2534,7 @@
                     const isChecked = compSelecionadas.includes(cNome) ? 'checked' : '';
                     compContainer.innerHTML += `
                         <label class="option-item">
-                            <span>${cNome} (${c.categoria || 'Geral'})</span>
+                            <span>${cNome} (${getCategoryLabel(c.categoria) || 'Geral'})</span>
                             <input type="checkbox" name="adm-prod-comp-check" value="${cNome}" ${isChecked}>
                         </label>
                     `;
@@ -2767,6 +2749,11 @@
                         }
                         if (gistResponseData.files[fileName].raw_url) {
                             const newRawUrl = gistResponseData.files[fileName].raw_url;
+                            
+                            // Guarda na variável da aplicação e no sessionStorage/objeto de empresas
+                            window.GIST_LINK_ATUALIZADO = newRawUrl;
+                            sessionStorage.setItem(`empresa_link_${empId}`, newRawUrl);
+
                             if (state.adminLoggedCompany) state.adminLoggedCompany.link = newRawUrl;
                             const empIndex = state.empresas.findIndex(e => e.id === empId);
                             if (empIndex !== -1) state.empresas[empIndex].link = newRawUrl;
@@ -3166,7 +3153,9 @@
 			try {
 				let rawText;
 				try {
-					const res = await fetch(company.link);
+                    // Sugestão: Usar o novo link salvo caso exista, senão usar o link padrão do json
+                    const targetLink = window.GIST_LINK_ATUALIZADO || sessionStorage.getItem(`empresa_link_${company.id}`) || company.link;
+					const res = await fetch(targetLink);
 					rawText = await res.text();
 				} catch {
 					// fallback
