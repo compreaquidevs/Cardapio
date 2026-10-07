@@ -2056,12 +2056,18 @@
             msg += `*TOTAL DO PEDIDO:* ${formatMoney(total)}\n`;
 
             const encodedMsg = encodeURIComponent(msg);
-            const whatsappUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_TARGET}&amp;&text=${encodedMsg}`;
+            
+            // Lógica para utilizar o número da empresa ou o número padrão
+            const targetNumber = (state.currentCompany && state.currentCompany.numero) 
+                ? String(state.currentCompany.numero).replace(/\D/g, '') 
+                : WHATSAPP_TARGET;
+
+            const whatsappUrl = `https://api.whatsapp.com/send?phone=${targetNumber}&amp;&text=${encodedMsg}`;
 
             window.open(whatsappUrl, '_blank');
 			
 			await registrarPedidoNoGist(pedidoPayload);
-            await incrementarNumeroPedidosMes(state.currentCompany ? state.currentCompany.id : "");
+            await incrementarNumeroPedidosMes(state.currentCompany ? state.currentCompany.id : "", total);
 
             setTimeout(() => {
                 if (confirm("Seu pedido foi enviado no WhatsApp. Deseja limpar o carrinho agora?")) {
@@ -2073,8 +2079,9 @@
             }, 600);
         }
 
-        async function incrementarNumeroPedidosMes(empresaId) {
+        async function incrementarNumeroPedidosMes(empresaId, valorPedido) {
             if (!empresaId || !GT) return;
+            const valor = Math.round((parseFloat(valorPedido) || 0) * 100) / 100;
             try {
                 const res = await fetch(`https://api.github.com/gists/${GIST_NUMERO_PEDIDOS_ID}`, {
                     headers: { 'Authorization': `token ${GT}` }
@@ -2108,12 +2115,14 @@
 
                 if (mesObj) {
                     mesObj.numeropedidos = (parseInt(mesObj.numeropedidos) || 0) + 1;
+                    mesObj.valortotal = Math.round(((parseFloat(mesObj.valortotal) || 0) + valor) * 100) / 100;
                     if (!mesObj.ano) mesObj.ano = currentYear;
                 } else {
                     empObj.pedidos.push({
                         ano: currentYear,
                         mes: currentMonthName,
-                        numeropedidos: 1
+                        numeropedidos: 1,
+                        valortotal: valor
                     });
                 }
 
@@ -2135,12 +2144,80 @@
             }
         }
 
-        async function getNumeroPedidosMesAtualEmpresa(empresaId) {
-            if (!empresaId) return 0;
+        // Lê um arquivo de um Gist SEMPRE atualizado e devolve o texto.
+        // A URL "raw" do Gist passa pelo CDN do GitHub (cache de ~5 min) e isso não dá para
+        // evitar pelo navegador. A API do Gist devolve o conteúdo atual.
+        //  - useTokenFirst=true  -> tenta com token primeiro (painéis admin)
+        //  - useTokenFirst=false -> tenta sem token primeiro (clientes). O limite sem token é por IP,
+        //    enquanto o limite com token é compartilhado por todos os visitantes.
+        // Se tudo falhar, usa a URL raw (fallbackUrl), que pode estar alguns minutos desatualizada.
+        async function fetchGistFileFresh(gistId, fileName, fallbackUrl, useTokenFirst = false) {
+            const bust = Date.now();
+            if (gistId) {
+                const tentativas = useTokenFirst ? [true, false] : [false, true];
+                for (const comToken of tentativas) {
+                    if (comToken && !GT) continue;
+                    try {
+                        const res = await fetch(`https://api.github.com/gists/${gistId}?t=${bust}`, {
+                            headers: comToken ? { 'Authorization': `token ${GT}` } : {},
+                            cache: 'no-store'
+                        });
+                        if (!res.ok) continue; // ex.: limite de requisições atingido
+                        const gistData = await res.json();
+                        const file = gistData.files && gistData.files[fileName];
+                        if (!file) continue;
+                        if (file.truncated && file.raw_url) {
+                            const rawRes = await fetch(`${file.raw_url}?t=${bust}`, { cache: 'no-store' });
+                            return await rawRes.text();
+                        }
+                        if (typeof file.content === 'string') return file.content;
+                    } catch (err) {
+                        console.warn("Falha ao ler Gist via API, tentando alternativa:", err);
+                    }
+                }
+            }
+            if (!fallbackUrl) throw new Error("Não foi possível ler o Gist.");
+            const sep = fallbackUrl.includes('?') ? '&' : '?';
+            const res = await fetch(`${fallbackUrl}${sep}t=${bust}`, { cache: 'no-store' });
+            return await res.text();
+        }
+
+        function getProdutosFileName(empId) {
+            return empId === "lanches-avenida" ? "produtos_.txt" : "produtosPizzaria_.txt";
+        }
+
+        // Texto (JSON) dos produtos de uma empresa, sempre atualizado
+        async function fetchProdutosEmpresaTexto(empresa, useTokenFirst = false) {
+            const fallbackUrl = window.GIST_LINK_ATUALIZADO
+                || sessionStorage.getItem(`empresa_link_${empresa.id}`)
+                || empresa.link;
             try {
-                const res = await fetch(GIST_NUMERO_PEDIDOS_URL);
-                const rawText = await res.text();
-                const numData = safeJSONParse(rawText);
+                return await fetchGistFileFresh(
+                    GIST_IDS[empresa.id], getProdutosFileName(empresa.id), fallbackUrl, useTokenFirst
+                );
+            } catch (err) {
+                console.error("Erro ao buscar produtos, usando cópia local:", err);
+                return retornaProdutos(empresa.id);
+            }
+        }
+
+        async function fetchNumeroPedidosData() {
+            const texto = await fetchGistFileFresh(
+                GIST_NUMERO_PEDIDOS_ID, "numeropedidos.txt", GIST_NUMERO_PEDIDOS_URL, true
+            );
+            return safeJSONParse(texto);
+        }
+
+        async function getNumeroPedidosMesAtualEmpresa(empresaId) {
+            const resumo = await getResumoPedidosMesAtualEmpresa(empresaId);
+            return resumo.qtd;
+        }
+
+        async function getResumoPedidosMesAtualEmpresa(empresaId) {
+            const vazio = { qtd: 0, valor: 0 };
+            if (!empresaId) return vazio;
+            try {
+                const numData = await fetchNumeroPedidosData();
 
                 const currentNow = new Date();
                 const currentMonthName = MESES_NOME[currentNow.getMonth()];
@@ -2149,7 +2226,7 @@
                 const norm = (s) => (s || '').replace('=', '').replace(/^"|"$/g, '').trim().toLowerCase();
                 const empObj = numData.find(e => norm(getEmpresaKey(e)) === norm(empresaId));
 
-                if (!empObj || !empObj.pedidos) return 0;
+                if (!empObj || !empObj.pedidos) return vazio;
 
                 const mesObj = empObj.pedidos.find(p => {
                     const matchMes = p.mes && p.mes.toLowerCase() === currentMonthName;
@@ -2157,10 +2234,14 @@
                     return matchMes && pAno === currentYear;
                 });
 
-                return mesObj ? (parseInt(mesObj.numeropedidos) || 0) : 0;
+                if (!mesObj) return vazio;
+                return {
+                    qtd: parseInt(mesObj.numeropedidos) || 0,
+                    valor: parseFloat(mesObj.valortotal) || 0
+                };
             } catch (err) {
                 console.error("Erro ao obter total de pedidos no mês:", err);
-                return 0;
+                return vazio;
             }
         }
 
@@ -2399,13 +2480,7 @@
             if (state.adminGistData) return state.adminGistData;
 
             const emp = state.adminLoggedCompany;
-            let rawText;
-            try {
-                const res = await fetch(emp.link, { cache: 'no-cache' });
-                rawText = await res.text();
-            } catch {
-                rawText = retornaProdutos(emp.id);
-            }
+            const rawText = await fetchProdutosEmpresaTexto(emp, true);
             const data = safeJSONParse(rawText);
             state.adminGistData = data;
             return data;
@@ -2418,7 +2493,9 @@
             container.innerHTML = `<div class="loader-container"><div class="spinner"></div><p>Buscando dados...</p></div>`;
 
             const data = await fetchAdminCompanyData();
-            const totalPedidosMes = await getNumeroPedidosMesAtualEmpresa(emp.id);
+            const resumoMes = await getResumoPedidosMesAtualEmpresa(emp.id);
+            const totalPedidosMes = resumoMes.qtd;
+            const totalValorMes = resumoMes.valor;
             const productos = data[0].produtos || [];
             const compostos = data[0].compostos || data[0].composicao || [];
 
@@ -2489,6 +2566,10 @@
                     <div class="admin-orders-count-badge">
                         <i class="fa-solid fa-chart-line"></i>
                         <span>${totalPedidosMes} pedidos no mês</span>
+                    </div>
+                    <div class="admin-orders-count-badge">
+                        <i class="fa-solid fa-sack-dollar"></i>
+                        <span>${formatMoney(totalValorMes)} em vendas no mês</span>
                     </div>
 
                     <div style="display:flex; gap:10px; margin-bottom:16px;">
@@ -2726,7 +2807,7 @@
             if (!gistId) return showToast("Erro: Gist ID não configurado.");
             if (!GT) return showToast("Erro: Token de acesso não validado.");
 
-            const fileName = empId === "lanches-avenida" ? "produtos_.txt" : "produtosPizzaria_.txt";
+            const fileName = getProdutosFileName(empId);
 
             try {
                 const response = await fetch(`https://api.github.com/gists/${gistId}`, {
@@ -2967,9 +3048,7 @@
 
             let numData = [];
             try {
-                const res = await fetch(GIST_NUMERO_PEDIDOS_URL);
-                const rawText = await res.text();
-                numData = safeJSONParse(rawText);
+                numData = await fetchNumeroPedidosData();
             } catch (e) {
                 console.error("Erro ao carregar numero de pedidos:", e);
                 numData = [];
@@ -3063,6 +3142,7 @@
 
             let html = '';
             let totalGeral = 0;
+            let valorGeral = 0;
 
             state.numeroPedidosData.forEach(item => {
                 const empKey = getEmpresaKey(item);
@@ -3092,12 +3172,17 @@
 
                     filteredMeses.forEach(m => {
                         const qtd = parseInt(m.numeropedidos) || 0;
+                        const valorMes = parseFloat(m.valortotal) || 0;
                         totalGeral += qtd;
+                        valorGeral += valorMes;
                         const anoStr = m.ano !== undefined ? ` (${m.ano})` : '';
                         html += `
                             <div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:6px; background:#f9fafb; border-radius:6px; border:1px solid #e5e7eb;">
                                 <span style="text-transform:capitalize; font-weight:600;">📅 ${m.mes}${anoStr}</span>
-                                <span style="font-weight:800; color:#059669;">${qtd} pedido(s)</span>
+                                <span style="text-align:right; font-weight:800; color:#059669;">
+                                    ${qtd} pedido(s)<br>
+                                    <span style="font-size:0.8rem; color:#047857;">${formatMoney(valorMes)}</span>
+                                </span>
                             </div>
                         `;
                     });
@@ -3111,7 +3196,8 @@
                 return;
             }
 
-            html += `<div style="font-size:0.95rem; font-weight:800; text-align:center; margin-top:12px; color:var(--text-dark);">Total de Pedidos no Filtro: ${totalGeral}</div>`;
+            html += `<div style="font-size:0.95rem; font-weight:800; text-align:center; margin-top:12px; color:var(--text-dark);">Total de Pedidos no Filtro: ${totalGeral}</div>
+                     <div style="font-size:0.95rem; font-weight:800; text-align:center; margin-top:4px; color:#047857;">Valor Total no Filtro: ${formatMoney(valorGeral)}</div>`;
 
             container.innerHTML = html;
         }
@@ -3156,10 +3242,8 @@
 			try {
 				let rawText;
 				try {
-                    // Sugestão: Usar o novo link salvo caso exista, senão usar o link padrão do json
-                    const targetLink = window.GIST_LINK_ATUALIZADO || sessionStorage.getItem(`empresa_link_${company.id}`) || company.link;
-					const res = await fetch(targetLink);
-					rawText = await res.text();
+                    // Lê pela API do Gist (sem cache de CDN); a URL raw fica como alternativa
+					rawText = await fetchProdutosEmpresaTexto(company, false);
 				} catch {
 					// fallback
 				}
@@ -3207,7 +3291,7 @@
 				const isFechado = !d.ini || !d.fim || d.ini === d.fim;
 				const horario = isFechado ? 'Fechado' : `${d.ini} às ${d.fim}`;
 				
-				return `<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #e5e7eb; font-size: 0.85rem;">
+				return `<div style="display: flex; justify- space-between; padding: 4px 0; border-bottom: 1px dashed #e5e7eb; font-size: 0.85rem;">
 					<span>${d.label}</span>
 					<span style="font-weight: 600; color: ${isFechado ? 'var(--danger-color)' : '#374151'};">${horario}</span>
 				</div>`;
@@ -3248,7 +3332,7 @@
                   "empresa": {
                     "id": "lanches-avenida",
                     "id2": "1",
-                    "id3": "1",
+                    "numero": "5533999648737",
 					"demo": "true",
                     "link": "https://gist.githubusercontent.com/gustavoamorimqueiroz1/ffa6262e6c52acfcc27c3bbaf57f0f4e/raw/produtos_.txt",
                     "link_img": "https://raw.githubusercontent.com/gustavoamorimqueiroz1/CompreAquiImages/refs/heads/master/Customers/lanches_av.png",
@@ -3291,7 +3375,7 @@
                   "empresa": {
                     "id": "pizzaria-peperoni",
                     "id2": "2",
-                    "id3": "2",
+                    "numero": "5533999648737",
                     "demo": "false",
                     "link_img": "https://raw.githubusercontent.com/gustavoamorimqueiroz1/CompreAquiImages/refs/heads/master/Customers/pizzaria.png",
                     "link": "https://gist.githubusercontent.com/gustavoamorimqueiroz1/ae96b99917a000a43660401119b89efb/raw/produtosPizzaria_.txt",
